@@ -247,7 +247,7 @@ int input_touch_consumes_keycode(struct kbd_ctx* ctx,
 		}
 	}
 	// INSERT: ALT TOGGLE mouse <-> arrows
-	else if ((keycode == KEY_LEFTALT) /*|| (keycode == KEY_RIGHTALT*/)) {
+	else if ((keycode == KEY_LEFTALT) /*|| (keycode == KEY_RIGHTALT)*/) {
 		if (state == KEY_STATE_RELEASED) {
 
 			g_alt_mouse_mode ^= 1;   // toggle
