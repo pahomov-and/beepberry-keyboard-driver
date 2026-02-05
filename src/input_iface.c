@@ -65,6 +65,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 			input_report_key(ctx->kbd_dev, 171, TRUE);
 			input_report_key(ctx->kbd_dev, 171, FALSE);
 			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, FALSE);
+			input_sync(ctx->kbd_dev);
 
 		// Short hold power buttion opens Tmux menu (Control + code 174 in keymap)
 		} else if (ev->state == KEY_STATE_HOLD) {
@@ -72,6 +73,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 			input_report_key(ctx->kbd_dev, 174, TRUE);
 			input_report_key(ctx->kbd_dev, 174, FALSE);
 			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, FALSE);
+			input_sync(ctx->kbd_dev);
 		}
 		return;
 	}
@@ -94,6 +96,8 @@ static void key_report_event(struct kbd_ctx* ctx,
 
 	// Report key to input system
 	input_report_key(ctx->kbd_dev, keycode, ev->state == KEY_STATE_PRESSED);
+
+	input_sync(ctx->kbd_dev);
 
 	// Reset sticky modifiers
 	input_modifiers_reset(ctx);
@@ -285,6 +289,8 @@ int input_probe(struct i2c_client* i2c_client)
 
 	__set_bit(EV_KEY, g_ctx->ptr_dev->evbit);
 	__set_bit(EV_REL, g_ctx->ptr_dev->evbit);
+	__set_bit(INPUT_PROP_POINTER, g_ctx->ptr_dev->propbit);
+
 	input_set_capability(g_ctx->ptr_dev, EV_REL, REL_X);
 	input_set_capability(g_ctx->ptr_dev, EV_REL, REL_Y);
 	input_set_capability(g_ctx->ptr_dev, EV_KEY, BTN_LEFT);

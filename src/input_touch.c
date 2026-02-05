@@ -16,6 +16,7 @@
 #include "indicators.h"
 
 static uint8_t g_touch_indicator = 0;
+static uint8_t g_alt_mouse_mode = 0;   // 0 = arrows, 1 = mouse
 
 static void enable_scale_2x(struct kbd_ctx* ctx)
 {
@@ -111,6 +112,7 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 		if (ctx->ptr_dev) {
 			input_report_rel(ctx->ptr_dev, REL_X, (int8_t)ctx->touch.dx);
 			input_report_rel(ctx->ptr_dev, REL_Y, (int8_t)ctx->touch.dy);
+			input_sync(ctx->ptr_dev);
 	}
 		ctx->touch.dx = 0;
 		ctx->touch.dy = 0;
@@ -144,6 +146,7 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 			do {
 				input_report_key(ctx->kbd_dev, KEY_LEFT, TRUE);
 				input_report_key(ctx->kbd_dev, KEY_LEFT, FALSE);
+				input_sync(ctx->kbd_dev);
 				ctx->touch.x += x_threshold;
 			} while (ctx->touch.x <= -x_threshold);
 
@@ -242,6 +245,22 @@ int input_touch_consumes_keycode(struct kbd_ctx* ctx,
 				}
 			}
 		}
+	}
+	// INSERT: ALT TOGGLE mouse <-> arrows
+	else if ((keycode == KEY_LEFTALT) /*|| (keycode == KEY_RIGHTALT*/)) {
+		if (state == KEY_STATE_RELEASED) {
+
+			g_alt_mouse_mode ^= 1;   // toggle
+
+			if (g_alt_mouse_mode) {
+				input_touch_set_input_as(ctx, TOUCH_INPUT_AS_MOUSE);
+				input_touch_enable(ctx);
+			} else {
+				input_touch_set_input_as(ctx, TOUCH_INPUT_AS_KEYS);
+				input_touch_disable(ctx);
+			}
+		}
+		return 1;
 	}
 
 	return 0;
