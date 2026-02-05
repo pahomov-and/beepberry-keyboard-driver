@@ -104,8 +104,14 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 	if (ctx->touch.input_as == TOUCH_INPUT_AS_MOUSE) {
 
 		// Report mouse movement
-		input_report_rel(ctx->input_dev, REL_X, (int8_t)ctx->touch.dx);
-		input_report_rel(ctx->input_dev, REL_Y, (int8_t)ctx->touch.dy);
+		/*
+		 * Pointer events must go to ptr_dev, otherwise libinput
+		 * will see mixed keyboard+pointer capabilities on one device.
+		 */
+		if (ctx->ptr_dev) {
+			input_report_rel(ctx->ptr_dev, REL_X, (int8_t)ctx->touch.dx);
+			input_report_rel(ctx->ptr_dev, REL_Y, (int8_t)ctx->touch.dy);
+	}
 		ctx->touch.dx = 0;
 		ctx->touch.dy = 0;
 
@@ -136,8 +142,8 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 		if (ctx->touch.x <= -x_threshold) {
 
 			do {
-				input_report_key(ctx->input_dev, KEY_LEFT, TRUE);
-				input_report_key(ctx->input_dev, KEY_LEFT, FALSE);
+				input_report_key(ctx->kbd_dev, KEY_LEFT, TRUE);
+				input_report_key(ctx->kbd_dev, KEY_LEFT, FALSE);
 				ctx->touch.x += x_threshold;
 			} while (ctx->touch.x <= -x_threshold);
 
@@ -145,8 +151,8 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 		} else if (ctx->touch.x > x_threshold) {
 
 			do {
-				input_report_key(ctx->input_dev, KEY_RIGHT, TRUE);
-				input_report_key(ctx->input_dev, KEY_RIGHT, FALSE);
+				input_report_key(ctx->kbd_dev, KEY_RIGHT, TRUE);
+				input_report_key(ctx->kbd_dev, KEY_RIGHT, FALSE);
 				ctx->touch.x -= x_threshold;
 			} while (ctx->touch.x > x_threshold);
 		}
@@ -155,8 +161,8 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 		if (ctx->touch.y <= -y_threshold) {
 
 			do {
-				input_report_key(ctx->input_dev, KEY_UP, TRUE);
-				input_report_key(ctx->input_dev, KEY_UP, FALSE);
+				input_report_key(ctx->kbd_dev, KEY_UP, TRUE);
+				input_report_key(ctx->kbd_dev, KEY_UP, FALSE);
 				ctx->touch.y += y_threshold;
 			} while (ctx->touch.y <= -y_threshold);
 
@@ -164,8 +170,8 @@ void input_touch_report_event(struct kbd_ctx *ctx)
 		} else if (ctx->touch.y > y_threshold) {
 
 			do {
-				input_report_key(ctx->input_dev, KEY_DOWN, TRUE);
-				input_report_key(ctx->input_dev, KEY_DOWN, FALSE);
+				input_report_key(ctx->kbd_dev, KEY_DOWN, TRUE);
+				input_report_key(ctx->kbd_dev, KEY_DOWN, FALSE);
 				ctx->touch.y -= y_threshold;
 			} while (ctx->touch.y > y_threshold);
 		}
@@ -187,13 +193,15 @@ int input_touch_consumes_keycode(struct kbd_ctx* ctx,
 			// Keys mode, send enter
 			if ((ctx->touch.input_as == TOUCH_INPUT_AS_KEYS)
 			 && (state == KEY_STATE_RELEASED)) {
-				input_report_key(ctx->input_dev, KEY_ENTER, TRUE);
-				input_report_key(ctx->input_dev, KEY_ENTER, FALSE);
+				input_report_key(ctx->kbd_dev, KEY_ENTER, TRUE);
+				input_report_key(ctx->kbd_dev, KEY_ENTER, FALSE);
 
 			// Mouse mode, send mouse click
 			} else if (ctx->touch.input_as == TOUCH_INPUT_AS_MOUSE) {
-				input_report_key(ctx->input_dev, BTN_LEFT,
-					(state == KEY_STATE_PRESSED));
+				if (ctx->ptr_dev) {
+					input_report_key(ctx->ptr_dev, BTN_LEFT,
+						(state == KEY_STATE_PRESSED));
+				}
 			}
 
 			return 1;

@@ -65,12 +65,12 @@ static struct sticky_modifier g_sticky_altgr;
 
 static void press_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier const* sticky_modifier)
 {
-	input_report_key(ctx->input_dev, sticky_modifier->keycode, TRUE);
+	input_report_key(ctx->kbd_dev, sticky_modifier->keycode, TRUE);
 }
 
 static void release_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier const* sticky_modifier)
 {
-	input_report_key(ctx->input_dev, sticky_modifier->keycode, FALSE);
+	input_report_key(ctx->kbd_dev, sticky_modifier->keycode, FALSE);
 }
 
 static void lock_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* sticky_modifier)
@@ -90,7 +90,7 @@ static void disable_phys_alt(struct kbd_ctx* ctx, struct sticky_modifier const* 
 {
 	// Send key up event if there is a current phys. alt key being held
 	if (g_current_phys_alt_keycode) {
-		input_report_key(ctx->input_dev, g_current_phys_alt_keycode, FALSE);
+		input_report_key(ctx->kbd_dev, g_current_phys_alt_keycode, FALSE);
 		g_current_phys_alt_keycode = 0;
 	}
 

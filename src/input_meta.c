@@ -65,8 +65,8 @@ static int run_single_function_key(struct kbd_ctx* ctx, uint8_t keycode)
 	switch (keycode) {
 
 	case KEY_T:
-		input_report_key(ctx->input_dev, KEY_TAB, 1);
-		input_report_key(ctx->input_dev, KEY_TAB, 0);
+		input_report_key(ctx->kbd_dev, KEY_TAB, 1);
+		input_report_key(ctx->kbd_dev, KEY_TAB, 0);
 		return 1;
 
 	case KEY_X:
@@ -195,7 +195,7 @@ int input_meta_consumes_keycode(struct kbd_ctx* ctx,
 	}
 
 	// Report key to input system
-	input_report_key(ctx->input_dev, simulated_keycode,
+	input_report_key(ctx->kbd_dev, simulated_keycode,
 		state == KEY_STATE_PRESSED);
 
 	// Save remapped key
@@ -230,7 +230,7 @@ void input_meta_disable(struct kbd_ctx* ctx)
 
 	// Simulate key up event
 	if (g_current_meta_keycode) {
-		input_report_key(ctx->input_dev, g_current_meta_keycode, FALSE);
+		input_report_key(ctx->kbd_dev, g_current_meta_keycode, FALSE);
 		g_current_meta_keycode = 0;
 	}
 }

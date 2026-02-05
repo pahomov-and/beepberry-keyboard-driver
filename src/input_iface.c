@@ -6,6 +6,7 @@
 
 #include <linux/input.h>
 #include <linux/module.h>
+#include <linux/string.h>
 
 #include "config.h"
 #include "debug_levels.h"
@@ -33,7 +34,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 	}
 
 	// Post key scan event
-	input_event(ctx->input_dev, EV_MSC, MSC_SCAN, ev->scancode);
+	input_event(ctx->kbd_dev, EV_MSC, MSC_SCAN, ev->scancode);
 
 	// Map input scancode to Linux input keycode
 	keycode = ctx->keycode_map[ev->scancode];
@@ -60,17 +61,17 @@ static void key_report_event(struct kbd_ctx* ctx,
 
 		// Pressing power button sends Tmux prefix (Control + code 171 in keymap)
 		if (ev->state == KEY_STATE_PRESSED) {
-			input_report_key(ctx->input_dev, KEY_LEFTCTRL, TRUE);
-			input_report_key(ctx->input_dev, 171, TRUE);
-			input_report_key(ctx->input_dev, 171, FALSE);
-			input_report_key(ctx->input_dev, KEY_LEFTCTRL, FALSE);
+			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, TRUE);
+			input_report_key(ctx->kbd_dev, 171, TRUE);
+			input_report_key(ctx->kbd_dev, 171, FALSE);
+			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, FALSE);
 
 		// Short hold power buttion opens Tmux menu (Control + code 174 in keymap)
 		} else if (ev->state == KEY_STATE_HOLD) {
-			input_report_key(ctx->input_dev, KEY_LEFTCTRL, TRUE);
-			input_report_key(ctx->input_dev, 174, TRUE);
-			input_report_key(ctx->input_dev, 174, FALSE);
-			input_report_key(ctx->input_dev, KEY_LEFTCTRL, FALSE);
+			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, TRUE);
+			input_report_key(ctx->kbd_dev, 174, TRUE);
+			input_report_key(ctx->kbd_dev, 174, FALSE);
+			input_report_key(ctx->kbd_dev, KEY_LEFTCTRL, FALSE);
 		}
 		return;
 	}
@@ -92,7 +93,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 	keycode = input_modifiers_apply_pending(ctx, keycode);
 
 	// Report key to input system
-	input_report_key(ctx->input_dev, keycode, ev->state == KEY_STATE_PRESSED);
+	input_report_key(ctx->kbd_dev, keycode, ev->state == KEY_STATE_PRESSED);
 
 	// Reset sticky modifiers
 	input_modifiers_reset(ctx);
@@ -183,8 +184,9 @@ static void input_workqueue_handler(struct work_struct *work_struct_ptr)
 		ctx->raised_touch_event = 0;
 	}
 
-	// Synchronize input system and clear client interrupt flag
-	input_sync(ctx->input_dev);
+	// Synchronize input system(s) and clear client interrupt flag
+	input_sync(ctx->kbd_dev);
+	input_sync(ctx->ptr_dev);
 	if (kbd_write_i2c_u8(ctx->i2c_client, REG_INT, 0)) {
 		return;
 	}
@@ -237,39 +239,57 @@ int input_probe(struct i2c_client* i2c_client)
 		return rc;
 	}
 
-	// Allocate input device
-	if ((g_ctx->input_dev = devm_input_allocate_device(&i2c_client->dev)) == NULL) {
+	// Allocate keyboard input device
+	if ((g_ctx->kbd_dev = devm_input_allocate_device(&i2c_client->dev)) == NULL) {
 		dev_err(&i2c_client->dev,
 			"%s Could not devm_input_allocate_device BBQX0KBD.\n", __func__);
 		return -ENOMEM;
 	}
 
-	// Initialize input device
-	g_ctx->input_dev->name = i2c_client->name;
-	g_ctx->input_dev->id.bustype = BBQX0KBD_BUS_TYPE;
-	g_ctx->input_dev->id.vendor  = BBQX0KBD_VENDOR_ID;
-	g_ctx->input_dev->id.product = BBQX0KBD_PRODUCT_ID;
-	g_ctx->input_dev->id.version = BBQX0KBD_VERSION_ID;
+	// Allocate pointer input device
+	if ((g_ctx->ptr_dev = devm_input_allocate_device(&i2c_client->dev)) == NULL) {
+		dev_err(&i2c_client->dev,
+			"%s Could not devm_input_allocate_device BBQX0PTR.\n", __func__);
+		return -ENOMEM;
+	}
+
+	// ---------------- Keyboard device ----------------
+	g_ctx->kbd_dev->name = "beepy-kbd";
+	g_ctx->kbd_dev->id.bustype = BBQX0KBD_BUS_TYPE;
+	g_ctx->kbd_dev->id.vendor  = BBQX0KBD_VENDOR_ID;
+	g_ctx->kbd_dev->id.product = BBQX0KBD_PRODUCT_ID;
+	g_ctx->kbd_dev->id.version = BBQX0KBD_VERSION_ID;
 
 	// Initialize input device keycodes
-	g_ctx->input_dev->keycode = g_ctx->keycode_map;
-	g_ctx->input_dev->keycodesize = sizeof(g_ctx->keycode_map[0]);
-	g_ctx->input_dev->keycodemax = ARRAY_SIZE(keycodes);
+	g_ctx->kbd_dev->keycode = g_ctx->keycode_map;
+	g_ctx->kbd_dev->keycodesize = sizeof(g_ctx->keycode_map[0]);
+	g_ctx->kbd_dev->keycodemax = ARRAY_SIZE(keycodes);;
 
 	// Set input device keycode bits
 	for (i = 0; i < NUM_KEYCODES; i++) {
-		__set_bit(g_ctx->keycode_map[i], g_ctx->input_dev->keybit);
+		__set_bit(g_ctx->keycode_map[i], g_ctx->kbd_dev->keybit);
 	}
-	__clear_bit(KEY_RESERVED, g_ctx->input_dev->keybit);
-	__set_bit(EV_REP, g_ctx->input_dev->evbit);
-	__set_bit(EV_KEY, g_ctx->input_dev->evbit);
+	__clear_bit(KEY_RESERVED, g_ctx->kbd_dev->keybit);
+	__set_bit(EV_REP, g_ctx->kbd_dev->evbit);
+	__set_bit(EV_KEY, g_ctx->kbd_dev->evbit);
 
 	// Set input device capabilities
-	input_set_capability(g_ctx->input_dev, EV_MSC, MSC_SCAN);
-	input_set_capability(g_ctx->input_dev, EV_REL, REL_X);
-	input_set_capability(g_ctx->input_dev, EV_REL, REL_Y);
-	input_set_capability(g_ctx->input_dev, EV_KEY, BTN_LEFT);
-	input_set_capability(g_ctx->input_dev, EV_KEY, BTN_RIGHT);
+	input_set_capability(g_ctx->kbd_dev, EV_MSC, MSC_SCAN);
+
+	// ---------------- Pointer device ----------------
+	g_ctx->ptr_dev->name = "beepy-pointer";
+	g_ctx->ptr_dev->id.bustype = BBQX0KBD_BUS_TYPE;
+	g_ctx->ptr_dev->id.vendor  = BBQX0KBD_VENDOR_ID;
+	g_ctx->ptr_dev->id.product = BBQX0KBD_PRODUCT_ID;
+	g_ctx->ptr_dev->id.version = BBQX0KBD_VERSION_ID;
+
+	__set_bit(EV_KEY, g_ctx->ptr_dev->evbit);
+	__set_bit(EV_REL, g_ctx->ptr_dev->evbit);
+	input_set_capability(g_ctx->ptr_dev, EV_REL, REL_X);
+	input_set_capability(g_ctx->ptr_dev, EV_REL, REL_Y);
+	input_set_capability(g_ctx->ptr_dev, EV_KEY, BTN_LEFT);
+	input_set_capability(g_ctx->ptr_dev, EV_KEY, BTN_RIGHT);
+	input_set_capability(g_ctx->ptr_dev, EV_KEY, BTN_MOUSE);
 
 	// Request IRQ handler for I2C client and initialize workqueue
 	if ((rc = devm_request_threaded_irq(&i2c_client->dev,
@@ -282,12 +302,19 @@ int input_probe(struct i2c_client* i2c_client)
 	}
 	INIT_WORK(&g_ctx->work_struct, input_workqueue_handler);
 
-	// Register input device with input subsystem
+	// Register input devices with input subsystem
 	dev_info(&i2c_client->dev,
-		"%s registering input device", __func__);
-	if ((rc = input_register_device(g_ctx->input_dev))) {
+				"%s registering input devices", __func__);
+
+	if ((rc = input_register_device(g_ctx->kbd_dev))) {
 		dev_err(&i2c_client->dev,
-			"Failed to register input device, error: %d\n", rc);
+			"Failed to register keyboard input device, error: %d\n", rc);
+		return rc;
+	}
+
+	if ((rc = input_register_device(g_ctx->ptr_dev))) {
+		dev_err(&i2c_client->dev,
+			"Failed to register pointer input device, error: %d\n", rc);
 		return rc;
 	}
 

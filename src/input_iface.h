@@ -59,7 +59,8 @@ struct kbd_ctx
 	uint8_t version_number;
 
 	struct i2c_client *i2c_client;
-	struct input_dev *input_dev;
+	struct input_dev *kbd_dev;
+	struct input_dev *ptr_dev;
 
 	// Map from input HID scancodes to Linux keycodes
 	uint8_t *keycode_map;
