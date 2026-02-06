@@ -120,8 +120,8 @@ struct sym3_map_entry {
 static const struct sym3_map_entry g_sym3_map[KEY_MAX + 1] = {
 	[KEY_Q] = { KEY_LEFTBRACE, 0 },   // {
 	[KEY_W] = { KEY_RIGHTBRACE, 0 },  // }
-	[KEY_E] = { KEY_LEFTBRACKET, 0 }, // [
-	[KEY_R] = { KEY_RIGHTBRACKET, 0 },// ]
+	[KEY_E] = { KEY_LEFTBRACE, 0 },   // [
+	[KEY_R] = { KEY_RIGHTBRACE, 0 },  // ]
 	[KEY_T] = { KEY_BACKSLASH, 1 },   // |
 	[KEY_Y] = { KEY_7, 1 },           // &
 	[KEY_U] = { KEY_6, 1 },           // ^
