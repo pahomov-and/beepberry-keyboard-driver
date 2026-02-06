@@ -18,6 +18,9 @@
 
 #include "bbq20kbd_pmod_codes.h"
 
+// Physical scancode that should act as Super/Win for Sway navigation
+#define BEEPY_SCANCODE_SUPER   7
+
 // Global keyboard context and sysfs data
 struct kbd_ctx *g_ctx = NULL;
 
@@ -36,6 +39,15 @@ static void key_report_event(struct kbd_ctx* ctx,
 	// Post key scan event
 	input_event(ctx->kbd_dev, EV_MSC, MSC_SCAN, ev->scancode);
 
+	// --------------------------------------------------------------------
+	// Map dedicated hardware key to Super/Win for Sway navigation
+	// (raw scancode is the reliable identifier; ignore keycode_map for this key)
+	// --------------------------------------------------------------------
+	if (ev->scancode == BEEPY_SCANCODE_SUPER) {
+		keycode = KEY_LEFTMETA;
+		goto mapped_ok;
+	}
+
 	// Map input scancode to Linux input keycode
 	keycode = ctx->keycode_map[ev->scancode];
 	dev_info_fe(&ctx->i2c_client->dev,
@@ -53,6 +65,8 @@ static void key_report_event(struct kbd_ctx* ctx,
 			__func__, ev->scancode);
 		return;
 	}
+
+	mapped_ok:
 
 	// Update last keypress time
 	g_ctx->last_keypress_at = ktime_get_boottime_ns();
@@ -276,6 +290,9 @@ int input_probe(struct i2c_client* i2c_client)
 	__clear_bit(KEY_RESERVED, g_ctx->kbd_dev->keybit);
 	__set_bit(EV_REP, g_ctx->kbd_dev->evbit);
 	__set_bit(EV_KEY, g_ctx->kbd_dev->evbit);
+
+	// Ensure Super/Win is advertised even if it is not present in keycode_map[]
+	__set_bit(KEY_LEFTMETA, g_ctx->kbd_dev->keybit);
 
 	// Set input device capabilities
 	input_set_capability(g_ctx->kbd_dev, EV_MSC, MSC_SCAN);

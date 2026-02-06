@@ -45,6 +45,93 @@ struct sticky_modifier
 
 // Globals
 
+// ------------------------------
+// SYM second-layer mapping
+// base_key: key to press
+// need_shift: whether to press Shift around it
+// ------------------------------
+struct sym_map_entry {
+	uint8_t base_key;
+	uint8_t need_shift;
+};
+
+static const struct sym_map_entry g_sym_map[KEY_MAX + 1] = {
+	// q - #
+	[KEY_Q] = { KEY_3, 1 },
+	// w - 1
+	[KEY_W] = { KEY_1, 0 },
+	// e - 2
+	[KEY_E] = { KEY_2, 0 },
+	// r - 3
+	[KEY_R] = { KEY_3, 0 },
+	// t - (
+	[KEY_T] = { KEY_9, 1 },
+	// y - )
+	[KEY_Y] = { KEY_0, 1 },
+	// u - _
+	[KEY_U] = { KEY_MINUS, 1 },
+	// i - -
+	[KEY_I] = { KEY_MINUS, 0 },
+	// o - +
+	[KEY_O] = { KEY_EQUAL, 1 },
+	// p - @
+	[KEY_P] = { KEY_2, 1 },
+
+	// a - *
+	[KEY_A] = { KEY_8, 1 },
+	// s - 4
+	[KEY_S] = { KEY_4, 0 },
+	// d - 5
+	[KEY_D] = { KEY_5, 0 },
+	// f - 6
+	[KEY_F] = { KEY_6, 0 },
+	// g - /
+	[KEY_G] = { KEY_SLASH, 0 },
+	// h - :
+	[KEY_H] = { KEY_SEMICOLON, 1 },
+	// j - ;
+	[KEY_J] = { KEY_SEMICOLON, 0 },
+	// k - '
+	[KEY_K] = { KEY_APOSTROPHE, 0 },
+	// l - "
+	[KEY_L] = { KEY_APOSTROPHE, 1 },
+
+	// z - 7
+	[KEY_Z] = { KEY_7, 0 },
+	// x - 8
+	[KEY_X] = { KEY_8, 0 },
+	// c - 9
+	[KEY_C] = { KEY_9, 0 },
+	// v - ?
+	[KEY_V] = { KEY_SLASH, 1 },
+	// b - !
+	[KEY_B] = { KEY_1, 1 },
+	// n - ,
+	[KEY_N] = { KEY_COMMA, 0 },
+	// m - .
+	[KEY_M] = { KEY_DOT, 0 },
+};
+
+struct sym3_map_entry {
+	uint8_t base_key;
+	uint8_t need_shift;
+};
+
+static const struct sym3_map_entry g_sym3_map[KEY_MAX + 1] = {
+	[KEY_Q] = { KEY_LEFTBRACE, 0 },   // {
+	[KEY_W] = { KEY_RIGHTBRACE, 0 },  // }
+	[KEY_E] = { KEY_LEFTBRACKET, 0 }, // [
+	[KEY_R] = { KEY_RIGHTBRACKET, 0 },// ]
+	[KEY_T] = { KEY_BACKSLASH, 1 },   // |
+	[KEY_Y] = { KEY_7, 1 },           // &
+	[KEY_U] = { KEY_6, 1 },           // ^
+	[KEY_I] = { KEY_GRAVE, 1 },       // ~
+	[KEY_O] = { KEY_COMMA, 1 },       // <
+	[KEY_P] = { KEY_DOT, 1 },         // >
+};
+
+
+
 // "Real" modifiers like Shift and Control are handled by simulating
 // input key events. Since phys. alt is hardcoded, the state is here
 static uint8_t g_apply_phys_alt;
@@ -73,12 +160,82 @@ static void release_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier 
 	input_report_key(ctx->kbd_dev, sticky_modifier->keycode, FALSE);
 }
 
+// For SYM layer we do NOT want to expose KEY_RIGHTALT (AltGr) to the system,
+// because it would affect XKB and break deterministic symbol output.
+static void noop_sticky_modifier(struct kbd_ctx* ctx,
+	struct sticky_modifier const* sticky_modifier)
+{
+	(void)ctx;
+	(void)sticky_modifier;
+}
+
 static void lock_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* sticky_modifier)
 {
 	sticky_modifier->locked = 1;
 
 	// Report modifier to input system as pressed
 	sticky_modifier->set_callback(ctx, sticky_modifier);
+}
+
+static void apply_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* mod);
+
+static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t state)
+{
+	const struct sym_map_entry *m;
+
+	// Third layer: SYM + SHIFT
+	if (g_sticky_altgr.held && g_sticky_shift.held) {
+		const struct sym3_map_entry *m3 = &g_sym3_map[orig_keycode];
+
+		if (m3->base_key) {
+			if (state == KEY_STATE_RELEASED)
+				return 1;
+
+			if (m3->need_shift)
+				input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
+
+			input_report_key(ctx->kbd_dev, m3->base_key, TRUE);
+			input_report_key(ctx->kbd_dev, m3->base_key, FALSE);
+
+			if (m3->need_shift)
+				input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
+
+			input_sync(ctx->kbd_dev);
+			return 1;
+		}
+	}
+
+	// Only act while SYM is physically held
+	if (!g_sticky_altgr.held)
+		return 0;
+
+	m = &g_sym_map[orig_keycode];
+	if (!m->base_key)
+		return 0;
+
+	// Swallow releases (we emit tap-style sequences on press/hold)
+	if (state == KEY_STATE_RELEASED)
+		return 1;
+
+	// Apply other pending sticky modifiers (shift/ctrl/alt/phys_alt)
+	// NOTE: we intentionally do NOT apply altgr as a modifier to the system.
+	//apply_sticky_modifier(ctx, &g_sticky_shift);
+	apply_sticky_modifier(ctx, &g_sticky_ctrl);
+	apply_sticky_modifier(ctx, &g_sticky_phys_alt);
+	apply_sticky_modifier(ctx, &g_sticky_alt);
+
+	// Emit symbol as (optional) Shift + base_key
+	if (m->need_shift)
+		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
+
+	input_report_key(ctx->kbd_dev, m->base_key, TRUE);
+	input_report_key(ctx->kbd_dev, m->base_key, FALSE);
+
+	if (m->need_shift)
+		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
+
+	input_sync(ctx->kbd_dev);
+	return 1;
 }
 
 static void enable_phys_alt(struct kbd_ctx* ctx, struct sticky_modifier const* sticky_modifier)
@@ -243,6 +400,10 @@ static void reset_sticky_modifier(struct kbd_ctx* ctx,
 int input_modifiers_consumes_keycode(struct kbd_ctx* ctx,
 	uint8_t *remapped_keycode, uint8_t keycode, uint8_t state)
 {
+	// SYM held: remap alpha keys to second-layer symbols
+	// (Consumes the original key event if mapped)
+	if (sym_layer_emit(ctx, keycode, state))
+		return 1;
 
 	if ((keycode == KEY_LEFTSHIFT) || (keycode == KEY_RIGHTSHIFT)) {
 		transition_sticky_modifier(ctx, &g_sticky_shift, state);
@@ -356,8 +517,9 @@ int input_modifiers_probe(struct i2c_client* i2c_client, struct kbd_ctx *ctx)
 
 	default_init_sticky_modifier(&g_sticky_altgr);
 	g_sticky_altgr.keycode = KEY_RIGHTALT;
-	g_sticky_altgr.set_callback = press_sticky_modifier;
-	g_sticky_altgr.unset_callback = release_sticky_modifier;
+	// SYM layer: do NOT expose AltGr to input system (keep it internal)
+	g_sticky_altgr.set_callback = noop_sticky_modifier;
+	g_sticky_altgr.unset_callback = noop_sticky_modifier;
 	g_sticky_altgr.lock_callback = show_sym_menu;
 	g_sticky_altgr.indicator_idx = 4;
 	g_sticky_altgr.indicator_pixels = ind_altgr;
