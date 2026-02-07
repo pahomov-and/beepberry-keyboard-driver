@@ -18,6 +18,9 @@
 #include "indicators.h"
 
 #define SYMBOL_OVERLAY_PATH "/sbin/symbol-overlay"
+static uint8_t g_phys_shift_held;
+
+static inline int is_key_pressed_state(uint8_t state) { return state != KEY_STATE_RELEASED; }
 
 struct sticky_modifier
 {
@@ -118,8 +121,8 @@ struct sym3_map_entry {
 };
 
 static const struct sym3_map_entry g_sym3_map[KEY_MAX + 1] = {
-	[KEY_Q] = { KEY_LEFTBRACE, 0 },   // {
-	[KEY_W] = { KEY_RIGHTBRACE, 0 },  // }
+	[KEY_Q] = { KEY_LEFTBRACE, 1 },   // {
+	[KEY_W] = { KEY_RIGHTBRACE, 1 },  // }
 	[KEY_E] = { KEY_LEFTBRACE, 0 },   // [
 	[KEY_R] = { KEY_RIGHTBRACE, 0 },  // ]
 	[KEY_T] = { KEY_BACKSLASH, 1 },   // |
@@ -177,6 +180,32 @@ static void lock_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* st
 	sticky_modifier->set_callback(ctx, sticky_modifier);
 }
 
+// Emit "tap" of base key. If need_shift==1, wraps it with synthetic Shift,
+// BUT only if physical shift is NOT held (otherwise we'd incorrectly release it).
+//
+// Contract:
+//  - never releases physical Shift
+//  - safe for SYM + physical Shift combos
+//  - used by both 2nd and 3rd layers
+static void emit_tap_with_optional_shift(struct kbd_ctx* ctx, uint8_t base_key, uint8_t need_shift)
+{
+	uint8_t synth_shift = 0;
+
+	if (need_shift && !g_phys_shift_held) {
+		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
+		synth_shift = 1;
+	}
+
+	input_report_key(ctx->kbd_dev, base_key, TRUE);
+	input_report_key(ctx->kbd_dev, base_key, FALSE);
+
+	if (synth_shift) {
+		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
+	}
+
+	input_sync(ctx->kbd_dev);
+}
+
 static void apply_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* mod);
 
 static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t state)
@@ -184,23 +213,14 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 	const struct sym_map_entry *m;
 
 	// Third layer: SYM + SHIFT
-	if (g_sticky_altgr.held && g_sticky_shift.held) {
+	if (g_sticky_altgr.held && g_phys_shift_held) {
 		const struct sym3_map_entry *m3 = &g_sym3_map[orig_keycode];
 
 		if (m3->base_key) {
 			if (state == KEY_STATE_RELEASED)
-				return 1;
+                return 1;
 
-			if (m3->need_shift)
-				input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
-
-			input_report_key(ctx->kbd_dev, m3->base_key, TRUE);
-			input_report_key(ctx->kbd_dev, m3->base_key, FALSE);
-
-			if (m3->need_shift)
-				input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
-
-			input_sync(ctx->kbd_dev);
+			emit_tap_with_optional_shift(ctx, m3->base_key, m3->need_shift);
 			return 1;
 		}
 	}
@@ -224,17 +244,7 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 	apply_sticky_modifier(ctx, &g_sticky_phys_alt);
 	apply_sticky_modifier(ctx, &g_sticky_alt);
 
-	// Emit symbol as (optional) Shift + base_key
-	if (m->need_shift)
-		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
-
-	input_report_key(ctx->kbd_dev, m->base_key, TRUE);
-	input_report_key(ctx->kbd_dev, m->base_key, FALSE);
-
-	if (m->need_shift)
-		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
-
-	input_sync(ctx->kbd_dev);
+	emit_tap_with_optional_shift(ctx, m->base_key, m->need_shift);
 	return 1;
 }
 
@@ -406,6 +416,13 @@ int input_modifiers_consumes_keycode(struct kbd_ctx* ctx,
 		return 1;
 
 	if ((keycode == KEY_LEFTSHIFT) || (keycode == KEY_RIGHTSHIFT)) {
+		// PHYSICAL shift only (NOT sticky)
+        // Used exclusively for SYM+SHIFT third layer
+		if (state == KEY_STATE_PRESSED || state == KEY_STATE_HOLD)
+				g_phys_shift_held = 1;	
+		else if (state == KEY_STATE_RELEASED)
+				g_phys_shift_held = 0;
+
 		transition_sticky_modifier(ctx, &g_sticky_shift, state);
 		return 1;
 
@@ -446,6 +463,7 @@ void input_modifiers_reset(struct kbd_ctx* ctx)
 	reset_sticky_modifier(ctx, &g_sticky_phys_alt);
 	reset_sticky_modifier(ctx, &g_sticky_alt);
 	reset_sticky_modifier(ctx, &g_sticky_altgr);
+	g_phys_shift_held = 0;
 }
 
 void input_modifiers_send_control(struct kbd_ctx* ctx)
@@ -480,6 +498,7 @@ int input_modifiers_probe(struct i2c_client* i2c_client, struct kbd_ctx *ctx)
 	g_apply_phys_alt = 0;
 	g_current_phys_alt_keycode = 0;
 	g_showing_sym_menu = 0;
+	g_phys_shift_held = 0;
 
 	// Initialize sticky modifiers
 	default_init_sticky_modifier(&g_sticky_ctrl);
@@ -536,6 +555,7 @@ void input_modifiers_shutdown(struct i2c_client* i2c_client, struct kbd_ctx *ctx
 void input_modifiers_reset_shift(struct kbd_ctx* ctx)
 {
 	g_sticky_shift.pending = 0;
+	g_phys_shift_held = 0;
 	g_sticky_shift.unset_callback(ctx, &g_sticky_shift);
 	input_display_clear_indicator(g_sticky_shift.indicator_idx);
 }

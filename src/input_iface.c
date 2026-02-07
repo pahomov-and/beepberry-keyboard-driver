@@ -19,7 +19,7 @@
 #include "bbq20kbd_pmod_codes.h"
 
 // Physical scancode that should act as Super/Win for Sway navigation
-#define BEEPY_SCANCODE_SUPER   7
+#define BEEPY_SCANCODE_SUPER   65
 
 // Global keyboard context and sysfs data
 struct kbd_ctx *g_ctx = NULL;
