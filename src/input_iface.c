@@ -71,6 +71,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 	// Update last keypress time
 	g_ctx->last_keypress_at = ktime_get_boottime_ns();
 
+	/* 
 	if (keycode == KEY_STOP) {
 
 		// Pressing power button sends Tmux prefix (Control + code 171 in keymap)
@@ -91,6 +92,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 		}
 		return;
 	}
+	*/
 
 	// Subsystem key handling
 	if (input_fw_consumes_keycode(ctx, &keycode, keycode, ev->state)
