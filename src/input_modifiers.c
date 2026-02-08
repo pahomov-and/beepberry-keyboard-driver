@@ -212,10 +212,6 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 {
 	const struct sym_map_entry *m;
 
-	// Only alpha keys participate in SYM layers
-    if (orig_keycode < KEY_A || orig_keycode > KEY_Z)
-        return 0;
-
 	// Third layer: SYM + SHIFT
 	if (g_sticky_altgr.held && g_phys_shift_held) {
 		const struct sym3_map_entry *m3 = &g_sym3_map[orig_keycode];
