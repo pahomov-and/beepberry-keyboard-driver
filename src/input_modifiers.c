@@ -193,17 +193,20 @@ static void emit_tap_with_optional_shift(struct kbd_ctx* ctx, uint8_t base_key, 
 
 	if (need_shift && !g_phys_shift_held) {
 		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, TRUE);
+		input_sync(ctx->kbd_dev);
 		synth_shift = 1;
 	}
 
 	input_report_key(ctx->kbd_dev, base_key, TRUE);
+	input_sync(ctx->kbd_dev);
 	input_report_key(ctx->kbd_dev, base_key, FALSE);
+	input_sync(ctx->kbd_dev);
 
 	if (synth_shift) {
 		input_report_key(ctx->kbd_dev, KEY_LEFTSHIFT, FALSE);
+		input_sync(ctx->kbd_dev);
 	}
 
-	input_sync(ctx->kbd_dev);
 }
 
 static void apply_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* mod);
