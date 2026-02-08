@@ -430,7 +430,8 @@ int input_modifiers_consumes_keycode(struct kbd_ctx* ctx,
 		return 1;
 
 	} else if (keycode == KEY_LEFTALT) {
-		transition_sticky_modifier(ctx, &g_sticky_phys_alt, state);
+		//transition_sticky_modifier(ctx, &g_sticky_phys_alt, state);
+		transition_sticky_modifier(ctx, &g_sticky_alt, state);
 		return 1;
 
 	} else if (keycode == KEY_RIGHTALT) {

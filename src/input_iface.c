@@ -19,10 +19,23 @@
 #include "bbq20kbd_pmod_codes.h"
 
 // Physical scancode that should act as Super/Win for Sway navigation
-#define BEEPY_SCANCODE_SUPER   65
+#define BEEPY_SCANCODE_SUPER   0x76
 
 // Global keyboard context and sysfs data
 struct kbd_ctx *g_ctx = NULL;
+
+static inline bool is_modifier_key(uint16_t keycode)
+{
+       switch (keycode) {
+       case KEY_LEFTMETA:  case KEY_RIGHTMETA:
+       case KEY_LEFTALT:   case KEY_RIGHTALT:
+       case KEY_LEFTCTRL:  case KEY_RIGHTCTRL:
+       case KEY_LEFTSHIFT: case KEY_RIGHTSHIFT:
+               return true;
+       default:
+               return false;
+       }
+}
 
 // Main key event handler
 static void key_report_event(struct kbd_ctx* ctx,
@@ -71,6 +84,28 @@ static void key_report_event(struct kbd_ctx* ctx,
 	// Update last keypress time
 	g_ctx->last_keypress_at = ktime_get_boottime_ns();
 
+    /*
+    * IMPORTANT:
+    * Modifiers must be "holdable": only send press(1) and release(0).
+    * Do NOT apply sticky modifiers to them, and do NOT reset sticky state on modifier events.
+    * Also ignore HOLD state for modifiers (no repeats / no extra events).
+    */
+//    if (is_modifier_key(keycode)) {
+//        if (ev->state == KEY_STATE_HOLD) {
+//            return;
+//        }
+// 
+//	if (ev->state == KEY_STATE_PRESSED) {
+//            input_report_key(ctx->kbd_dev, keycode, 1);
+//            input_sync(ctx->kbd_dev);
+//        } else if (ev->state == KEY_STATE_RELEASED) {
+//            input_report_key(ctx->kbd_dev, keycode, 0);
+//            input_sync(ctx->kbd_dev);
+//        }
+// 
+//		return;
+//     }
+
 	/* 
 	if (keycode == KEY_STOP) {
 
@@ -98,7 +133,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 	if (input_fw_consumes_keycode(ctx, &keycode, keycode, ev->state)
 	 || input_touch_consumes_keycode(ctx, &keycode, keycode, ev->state)
 	 || input_modifiers_consumes_keycode(ctx, &keycode, keycode, ev->state)
-	 || input_meta_consumes_keycode(ctx, &keycode, keycode, ev->state)) {
+	 /*|| input_meta_consumes_keycode(ctx, &keycode, keycode, ev->state)*/) {
 		return;
 	}
 
@@ -290,7 +325,13 @@ int input_probe(struct i2c_client* i2c_client)
 		__set_bit(g_ctx->keycode_map[i], g_ctx->kbd_dev->keybit);
 	}
 	__clear_bit(KEY_RESERVED, g_ctx->kbd_dev->keybit);
-	__set_bit(EV_REP, g_ctx->kbd_dev->evbit);
+	
+	/*
+    * Wayland/Sway handles key repeat in userspace (wl_keyboard repeat_info).
+    * Kernel autorepeat (EV_REP) causes EV_KEY value=2 repeats for modifiers (e.g. META),
+    * which breaks Mod4 detection in libinput/sway.
+    */
+    /* __set_bit(EV_REP, g_ctx->kbd_dev->evbit); */
 	__set_bit(EV_KEY, g_ctx->kbd_dev->evbit);
 
 	// Ensure Super/Win is advertised even if it is not present in keycode_map[]
@@ -298,6 +339,10 @@ int input_probe(struct i2c_client* i2c_client)
 
 	// Set input device capabilities
 	input_set_capability(g_ctx->kbd_dev, EV_MSC, MSC_SCAN);
+	input_set_capability(g_ctx->kbd_dev, EV_KEY, KEY_LEFTMETA);
+	//input_set_capability(g_ctx->kbd_dev, EV_KEY, KEY_LEFTALT);
+	//input_set_capability(g_ctx->kbd_dev, EV_KEY, KEY_LEFTSHIFT);
+	//input_set_capability(g_ctx->kbd_dev, EV_KEY, KEY_LEFTCTRL);
 
 	// ---------------- Pointer device ----------------
 	g_ctx->ptr_dev->name = "beepy-pointer";
