@@ -209,14 +209,24 @@ static void emit_tap_with_optional_shift(struct kbd_ctx* ctx, uint8_t base_key, 
 
 }
 
+// SYM is active if physically held OR sticky (one-shot) OR locked
+static inline int sym_active(void)
+{
+    return g_sticky_altgr.held ||
+           g_sticky_altgr.sticky ||
+           g_sticky_altgr.locked;
+}
+
 static void apply_sticky_modifier(struct kbd_ctx* ctx, struct sticky_modifier* mod);
+static void reset_sticky_modifier(struct kbd_ctx* ctx,	struct sticky_modifier* mod);
 
 static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t state)
 {
 	const struct sym_map_entry *m;
 
 	// Third layer: SYM + SHIFT
-	if (g_sticky_altgr.held && g_phys_shift_held) {
+	//if (g_sticky_altgr.held && g_phys_shift_held) {
+	if (sym_active() && g_phys_shift_held) {
 		const struct sym3_map_entry *m3 = &g_sym3_map[orig_keycode];
 
 		if (m3->base_key) {
@@ -229,8 +239,13 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 	}
 
 	// Only act while SYM is physically held
-	if (!g_sticky_altgr.held)
+	//if (!g_sticky_altgr.held)
+	//	return 0;
+
+	// Act while SYM is held OR latched (sticky) OR locked
+	if (!sym_active())
 		return 0;
+
 
 	m = &g_sym_map[orig_keycode];
 	if (!m->base_key)
@@ -248,6 +263,28 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 	apply_sticky_modifier(ctx, &g_sticky_alt);
 
 	emit_tap_with_optional_shift(ctx, m->base_key, m->need_shift);
+	
+	// Consume SYM one-shot after one emitted symbol
+	if (g_sticky_altgr.sticky &&
+		!g_sticky_altgr.locked &&
+		!g_sticky_altgr.held) {
+
+		g_sticky_altgr.sticky = 0;
+
+		// Clear indicator
+		input_display_clear_indicator(g_sticky_altgr.indicator_idx);
+
+		// Clear overlay if shown
+		if (g_showing_sym_menu) {
+			input_display_clear_overlays();
+			g_showing_sym_menu = 0;
+		}
+	}
+
+	reset_sticky_modifier(ctx, &g_sticky_ctrl);
+	reset_sticky_modifier(ctx, &g_sticky_alt);
+	reset_sticky_modifier(ctx, &g_sticky_phys_alt);
+
 	return 1;
 }
 
@@ -289,6 +326,13 @@ static void show_sym_menu(struct kbd_ctx* ctx, struct sticky_modifier* sticky_mo
 	// Call overlay helper
 	overlay_argv[1] = params_get_sharp_path();
 	call_usermodehelper(overlay_argv[0], (char**)overlay_argv, NULL, UMH_NO_WAIT);
+}
+
+static void lock_and_show_sym_menu(struct kbd_ctx* ctx,
+                                   struct sticky_modifier* sticky_modifier)
+{
+    sticky_modifier->locked = 1;
+    show_sym_menu(ctx, sticky_modifier);
 }
 
 // Sticky modifier keys follow BB Q10 convention
@@ -543,7 +587,7 @@ int input_modifiers_probe(struct i2c_client* i2c_client, struct kbd_ctx *ctx)
 	// SYM layer: do NOT expose AltGr to input system (keep it internal)
 	g_sticky_altgr.set_callback = noop_sticky_modifier;
 	g_sticky_altgr.unset_callback = noop_sticky_modifier;
-	g_sticky_altgr.lock_callback = show_sym_menu;
+	g_sticky_altgr.lock_callback = lock_and_show_sym_menu; //show_sym_menu;
 	g_sticky_altgr.indicator_idx = 4;
 	g_sticky_altgr.indicator_pixels = ind_altgr;
 
