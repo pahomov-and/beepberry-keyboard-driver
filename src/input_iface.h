@@ -173,4 +173,12 @@ int input_meta_consumes_keycode(struct kbd_ctx* ctx,
 void input_meta_enable(struct kbd_ctx* ctx);
 void input_meta_disable(struct kbd_ctx* ctx);
 
+// Super (Mod4) layer
+
+int input_super_probe(struct i2c_client* i2c_client, struct kbd_ctx *ctx);
+void input_super_shutdown(struct i2c_client* i2c_client, struct kbd_ctx *ctx);
+
+int input_super_consumes_keycode(struct kbd_ctx* ctx,
+	uint8_t *remapped_keycode, uint8_t keycode, uint8_t state);
+
 #endif

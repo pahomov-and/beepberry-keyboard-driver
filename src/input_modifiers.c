@@ -118,19 +118,29 @@ static const struct sym_map_entry g_sym_map[KEY_MAX + 1] = {
 struct sym3_map_entry {
 	uint8_t base_key;
 	uint8_t need_shift;
+	uint8_t suppress;  // if 1: consume the key, emit nothing
 };
 
 static const struct sym3_map_entry g_sym3_map[KEY_MAX + 1] = {
-	[KEY_Q] = { KEY_LEFTBRACE, 1 },   // {
+	// Top row: bracket pairs + extras
+	[KEY_Q] = { KEY_LEFTBRACE,  1 },  // {
 	[KEY_W] = { KEY_RIGHTBRACE, 1 },  // }
-	[KEY_E] = { KEY_LEFTBRACE, 0 },   // [
+	[KEY_E] = { KEY_LEFTBRACE,  0 },  // [
 	[KEY_R] = { KEY_RIGHTBRACE, 0 },  // ]
-	[KEY_T] = { KEY_BACKSLASH, 1 },   // |
-	[KEY_Y] = { KEY_7, 1 },           // &
-	[KEY_U] = { KEY_6, 1 },           // ^
-	[KEY_I] = { KEY_GRAVE, 1 },       // ~
-	[KEY_O] = { KEY_COMMA, 1 },       // <
-	[KEY_P] = { KEY_DOT, 1 },         // >
+	[KEY_T] = { KEY_COMMA,      1 },  // <
+	[KEY_Y] = { KEY_DOT,        1 },  // >
+	[KEY_U] = { KEY_6,          1 },  // ^
+	[KEY_I] = { KEY_GRAVE,      1 },  // ~
+	[KEY_O] = { KEY_EQUAL,      0 },  // =  (pairs with SYM+O=+, same key on std kbd)
+	[KEY_P] = { KEY_BACKSLASH,  1 },  // |
+	// Middle row: missing symbols replacing digit fallbacks (4 5 6)
+	[KEY_S] = { KEY_GRAVE,      0 },  // `  (backtick)
+	[KEY_D] = { KEY_5,          1 },  // %  (Shift+5, SYM+D=5)
+	[KEY_F] = { KEY_BACKSLASH,  0 },  // \  (pairs with SYM+G=/)
+	// Bottom row
+	[KEY_Z] = { KEY_7,  1, 0 },  // &  (Shift+7, SYM+Z=7)
+	[KEY_X] = { KEY_8,  1, 0 },  // *  (Shift+8, SYM+X=8)
+	[KEY_C] = { 0,      0, 1 },  // suppressed — SYM+Shift+C emits nothing
 };
 
 
@@ -228,6 +238,9 @@ static int sym_layer_emit(struct kbd_ctx* ctx, uint8_t orig_keycode, uint8_t sta
 	//if (g_sticky_altgr.held && g_phys_shift_held) {
 	if (sym_active() && g_phys_shift_held) {
 		const struct sym3_map_entry *m3 = &g_sym3_map[orig_keycode];
+
+		if (m3->suppress)
+			return 1;
 
 		if (m3->base_key) {
 			if (state == KEY_STATE_RELEASED)

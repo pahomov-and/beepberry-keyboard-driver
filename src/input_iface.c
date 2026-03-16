@@ -133,6 +133,7 @@ static void key_report_event(struct kbd_ctx* ctx,
 	if (input_fw_consumes_keycode(ctx, &keycode, keycode, ev->state)
 	 || input_touch_consumes_keycode(ctx, &keycode, keycode, ev->state)
 	 || input_modifiers_consumes_keycode(ctx, &keycode, keycode, ev->state)
+	 || input_super_consumes_keycode(ctx, &keycode, keycode, ev->state)
 	 /*|| input_meta_consumes_keycode(ctx, &keycode, keycode, ev->state)*/) {
 		return;
 	}
@@ -293,6 +294,10 @@ int input_probe(struct i2c_client* i2c_client)
 		dev_err(&i2c_client->dev, "beepy-kbd: input_meta_probe failed\n");
 		return rc;
 	}
+	if ((rc = input_super_probe(i2c_client, g_ctx))) {
+		dev_err(&i2c_client->dev, "beepy-kbd: input_super_probe failed\n");
+		return rc;
+	}
 
 	// Allocate keyboard input device
 	if ((g_ctx->kbd_dev = devm_input_allocate_device(&i2c_client->dev)) == NULL) {
@@ -336,6 +341,28 @@ int input_probe(struct i2c_client* i2c_client)
 
 	// Ensure Super/Win is advertised even if it is not present in keycode_map[]
 	__set_bit(KEY_LEFTMETA, g_ctx->kbd_dev->keybit);
+
+	// Advertise keys emitted by the Super layer
+	__set_bit(KEY_F1,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F2,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F3,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F4,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F5,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F6,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F7,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F8,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F9,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F10,      g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F11,      g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_F12,      g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_LEFT,     g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_RIGHT,    g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_UP,       g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_DOWN,     g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_PAGEUP,   g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_PAGEDOWN, g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_HOME,     g_ctx->kbd_dev->keybit);
+	__set_bit(KEY_END,      g_ctx->kbd_dev->keybit);
 
 	// Set input device capabilities
 	input_set_capability(g_ctx->kbd_dev, EV_MSC, MSC_SCAN);
@@ -394,6 +421,7 @@ int input_probe(struct i2c_client* i2c_client)
 void input_shutdown(struct i2c_client* i2c_client)
 {
 	// Run subsystem shutdowns
+	input_super_shutdown(i2c_client, g_ctx);
 	input_meta_shutdown(i2c_client, g_ctx);
 	input_touch_shutdown(i2c_client, g_ctx);
 	input_modifiers_shutdown(i2c_client, g_ctx);
